@@ -31,6 +31,7 @@ Load relevant libraries
 #| message: false
 library(tidyverse)
 library(janitor)
+library(patchwork)
 ```
 
 Load relevant data files, and make the column names easier to parse programatically.
@@ -60,7 +61,7 @@ nr_responses <- data_responses_raw |> count()
 
 We had `r nr_responses`, which we assume roughly equates to the number of people who responded (but as it is anonymous, we cannot guarantee so some people responded twice - however our survey software does try to re-use previous responses if made via the same browser).
 
-As of March 18th 2025, we had `nr_slack_members` people on slack. This means we have an approximate response rate of `r (nr_responses / nr_slack_members) * 100`%.
+As of March 18th 2025, we had `nr_slack_members` people on slack. This means we have an approximate response rate of `r round((nr_responses / nr_slack_members) * 100, 1)`%.
 
 
 ### Geographic Location Analysis
@@ -187,7 +188,7 @@ ggplot(
   geom_col(fill = "#24b064") +
   theme_minimal() +
   labs(title = "Type of respondee", 
-     subtitle = "Users only run pipelines, Developers alsocode pipelines, Snakemake developers is a survey troll", 
+     subtitle = "Users run pipelines, Developers code pipelines, Snakemake developer is a survey troll", 
      x = "Score",
      y = "Count", 
      caption = paste("Based on", nr_responses, "responses to the spring 2025 nf-core community survey")
@@ -221,6 +222,31 @@ ggplot(data_recommend_score,
      caption = paste("Based on", nr_responses, "responses to the spring 2025 nf-core community survey")
   )
 ```
+
+We can also calculate the 'net promoter score' score, which subtracts the percentage  'detractor' responders from 'promoter' responses.
+
+The higher the value, the happier the responders are overall.
+Typically negative values indicates there are more 'detractors' than promotors (therefore a negative view), whereas 60-100 is a strong responder satisfaction.
+
+```{r}
+enps_percentages = data_responses_raw |>
+  select(how_likely_are_you_to_recommend_nf_core_to_others) |>
+  mutate(
+    group = case_when(
+      how_likely_are_you_to_recommend_nf_core_to_others <= 6 ~ 'Detractor',
+      how_likely_are_you_to_recommend_nf_core_to_others >= 9 ~ 'Promoter',
+      .default = 'Neutral'
+    )
+  ) |> 
+  group_by(group) |> 
+  summarise(
+    percent = (n() / nr_responses) * 100
+  ) |> unnest(cols = c(group, percent))
+
+enps_score = round(enps_percentages |> filter(group == 'Promoter') |> pull(n) - enps_percentages |> filter(group == 'Detractor') |> pull(n))
+```
+
+Based on the eNPS we have a score of `r enps_score` which is pretty close to a very strong 'happiness' but we can do better.
 
 ### Confidence with nf-core pipelines
 
@@ -294,6 +320,7 @@ We can then plot bar charts with the number of responses hitting a particular to
 Note that remove responses that had no feedback.
 
 ```{r}
+#| fig-height: 18
 plot_topics_summary <- function(in_data, title) {
   ggplot(in_data, aes(y = topic, x = count)) +
     geom_col(fill = "#24b064") +
@@ -302,11 +329,12 @@ plot_topics_summary <- function(in_data, title) {
          x = "Count", 
          y = "Topic", 
          caption = paste("Based on", nr_responses, "responses to the spring 2025 nf-core community survey")
-    )
+    ) +
+    scale_x_continuous(breaks = seq(0, 70, by = 10), limits = c(0,80))
 }
 
-plot_topics_summary(data_tags_positive, "Topics the respondees are happy about")
-plot_topics_summary(data_tags_improve, "Topics the respondees think should be improved upon")
+plot_topics_summary(data_tags_positive, "Topics the respondees are happy about") /
+plot_topics_summary(data_tags_improve, "Topics the respondees think should be improved upon") /
 plot_topics_summary(data_tags_request, "Topics of specific requests from respondees")
 ```
 
