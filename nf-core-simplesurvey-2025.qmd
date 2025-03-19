@@ -1,0 +1,312 @@
+---
+title: "nf-core spring survey 2025"
+title-block-banner: '#24b064'
+backgroundcolor: '#212529'
+format:
+  html:
+    code-fold: true
+    code-summary: "Show the code"
+    fig-width: 8
+    fig-height: 6
+    mainfont: "Inter Variable"
+    monofont: "Roboto Mono"
+    embed-resources: true
+    toc: true
+    toc-location: left
+    theme: [darkly, brand/theme.css]
+    navbar:
+      search: true
+---
+
+## Introduction
+
+This notebook processes the results of the nf-core community general survey from February/March 2025.
+
+## Preparation
+
+Load relevant libraries
+
+```{r}
+#| warning: false
+#| message: false
+library(tidyverse)
+library(janitor)
+```
+
+Load relevant data files, and make the column names easier to parse programatically.
+
+```{r}
+#| warning: false
+#| message: false
+## Raw responses
+data_responses_raw <- read_csv("data/nf-core_community_survey_-_Feb_2025_-_nf-core_community_survey_2025.csv") |> clean_names()
+
+## Free text response columns plus columns containing manually tagged 'keyword' by @jfy133
+data_responses_tagged <- read_csv(
+  "data/nf-core_community_survey_-_Feb_2025_-_2025-03-16-freeze-annotated_(JFY).csv"
+) |> clean_names()
+```
+
+## Demographic information
+
+### Number of responses
+
+The first bit of information we can find out is the number responses overall.
+
+```{r}
+nr_slack_members <- 11640 ## As of March 18 2025
+nr_responses <- data_responses_raw |> count()
+```
+
+We had `r nr_responses`, which we assume roughly equates to the number of people who responded (but as it is anonymous, we cannot guarantee so some people responded twice - however our survey software does try to re-use previous responses if made via the same browser).
+
+As of March 18th 2025, we had `nr_slack_members` people on slack. This means we have an approximate response rate of `r (nr_responses / nr_slack_members) * 100`%.
+
+
+### Geographic Location Analysis
+
+First we would like to understand where the respondents of the survey are from.
+
+First we parse and clean-up the response data (fixing some country names to match the map data), and then calculate the number of responses per country.
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+data_map <- map_data("world")
+
+data_responses_country <- data_responses_raw |>
+  select(what_country_are_you_based_in) |>
+  mutate(
+    what_country_are_you_based_in = if_else(
+      what_country_are_you_based_in == 'United Kingdom',
+      'UK',
+      what_country_are_you_based_in
+    ),
+    what_country_are_you_based_in = 
+      if_else(is.na(what_country_are_you_based_in),
+        'No response',
+        what_country_are_you_based_in)
+  ) |>
+  group_by(what_country_are_you_based_in) |>
+  summarise(nr_response_per_country = n()) |>
+  arrange(desc(nr_response_per_country)) |>
+  mutate(
+    what_country_are_you_based_in = fct_reorder(what_country_are_you_based_in, nr_response_per_country),
+    what_country_are_you_based_in = fct_relevel(what_country_are_you_based_in, 'No response')
+  )
+
+nr_country_noresponse <- data_responses_country |> filter(what_country_are_you_based_in == 'No response') |> pull(nr_response_per_country)
+```
+
+We can then visualise these counts in a bar plot to see which countries we got more or less responses from.
+
+```{r}
+ggplot(
+  data_responses_country,
+  aes(y = what_country_are_you_based_in, x = nr_response_per_country)
+) +
+  geom_col(fill = "#24b064") +
+  theme_minimal() +
+  labs(title = "Location of respondees", 
+     subtitle = "Number of respondees per INSDC country category. NA: no response to question.", 
+     x = "Count",
+     y = "Country", 
+     caption = paste("Based on", nr_responses, "responses to the spring 2025 nf-core community survey")
+  )
+```
+
+To better visualise, we can plot a map with each country that has at least a single response filled with a colour. 
+
+```{r}
+#| warning: false
+#| message: false
+## Merge data with world map
+data_map_rendering <- data_map |>
+  left_join(data_responses_country |> rename(region = what_country_are_you_based_in)) |>
+  mutate(country_fill = ifelse(!is.na(nr_response_per_country), "#24b064", "white"))
+
+# Use scale_fill to set correct colours
+ggplot(data_map_rendering,
+       aes(long, lat, group = group, fill = country_fill)) +
+  geom_polygon(colour = "gray") +
+  scale_fill_identity() +
+  theme_minimal() +
+  labs(title = "Countries with a response",
+     subtitle = paste("Countries from which at least one response was received.", nr_country_noresponse ,"people did not respond to question"), 
+     x = "Longitude",
+     y = "Latitude", 
+     caption = paste("Based on", nr_responses, "responses to the spring 2025 nf-core community survey")
+  )
+
+```
+
+
+### nf-core community member type
+
+We also wanted to understand what type of nf-core community member was responding - a user, developer, or both.
+
+For this we take the raw responses, then clean up the community member type, as we had an 'other' column which appears to have been not that useful as most people put in responses that still correspond to our three types. 
+We can summarise this by counting the number of categories in the column.
+
+```{r}
+data_responses_respondertype <- data_responses_raw |>
+  select(do_you_consider_yourself_to_be_an_nf_core) |>
+  mutate(
+    do_you_consider_yourself_to_be_an_nf_core = case_match(
+      do_you_consider_yourself_to_be_an_nf_core,
+      "Developer, User" ~ "User, Developer",
+      "User, Exploring" ~ "User",
+      "non nf-core nf dev" ~ "Developer",
+      "Newcomer" ~ "User",
+      "Newbie" ~ "User",
+      "Developer, User, Manager" ~ "User, Developer",
+      "Developer, Maintainer" ~ "Developer",
+      "develop in nextflow" ~ "Developer",
+      "both" ~ "User, Developer",
+      NA ~ 'No response',
+      .default = do_you_consider_yourself_to_be_an_nf_core
+    )
+  ) |>
+  group_by(do_you_consider_yourself_to_be_an_nf_core) |>
+  summarise(nr = n()) |>
+  arrange(desc(nr)) |>
+  mutate(
+    do_you_consider_yourself_to_be_an_nf_core = fct_reorder(do_you_consider_yourself_to_be_an_nf_core, nr),
+    do_you_consider_yourself_to_be_an_nf_core = fct_relevel(do_you_consider_yourself_to_be_an_nf_core, 'No response')
+  )
+```
+
+As with the countries, the best way to plot this is via a bar chart.
+
+```{r}
+ggplot(
+  data_responses_respondertype,
+  aes(y = do_you_consider_yourself_to_be_an_nf_core, x = nr)
+) +
+  geom_col(fill = "#24b064") +
+  theme_minimal() +
+  labs(title = "Type of respondee", 
+     subtitle = "Users only run pipelines, Developers alsocode pipelines, Snakemake developers is a survey troll", 
+     x = "Score",
+     y = "Count", 
+     caption = paste("Based on", nr_responses, "responses to the spring 2025 nf-core community survey")
+  )
+```
+
+### Overall happiness with nf-core
+
+Another question was 'how like would you recommend nf-core to others', to use as a general gauge to the happiness of responders to nf-core as a whole.
+
+We can select the column.
+
+```{r}
+data_recommend_score <- data_responses_raw |>
+  select(how_likely_are_you_to_recommend_nf_core_to_others) |> 
+  filter(!is.na(how_likely_are_you_to_recommend_nf_core_to_others))
+```
+
+And then use the inbuilt group and counting functionality to plot a histogram with the a count of responses per score level.
+
+```{r}
+ggplot(data_recommend_score,
+       aes(how_likely_are_you_to_recommend_nf_core_to_others)) +
+  geom_histogram(bins = 10, fill = "#24b064") +
+  theme_minimal() +
+  scale_x_continuous(breaks = seq(0, 10, by = 1)) +
+  labs(title = "Likelihood of recommending nf-core to others", 
+     subtitle = "0: not at all, 5: extremely likely", 
+     x = "Score",
+     y = "Count", 
+     caption = paste("Based on", nr_responses, "responses to the spring 2025 nf-core community survey")
+  )
+```
+
+### Confidence with nf-core pipelines
+
+Finally to understand if responders were newcomers versus long time members, we asked how confident people felt using nf-core pipelines, with the assumption of more confident people will have been around for a longer time.
+
+```{r}
+data_confidence_score <- data_responses_raw |>
+  select(how_confident_are_you_working_with_nf_core_pipelines) |> 
+  filter(!is.na(how_confident_are_you_working_with_nf_core_pipelines))
+
+```
+
+And generate another histogram.
+
+```{r}
+ggplot(
+  data_confidence_score,
+  aes(how_confident_are_you_working_with_nf_core_pipelines)
+) +
+  geom_histogram(bins = 5, fill = "#24b064") +
+  theme_minimal() +
+  labs(title = "Level of confidence in using or developing nf-core pipelines", 
+     subtitle = "1: newcomer, 5: advanced", 
+     x = "Confidence score",
+     y = "Count", 
+     caption = paste("Based on", nr_responses, "responses to the spring 2025 nf-core community survey")
+)
+```
+
+## Feedback - positive and to improve upon
+
+The main questions of the survey - what are you most happy with, what have been your biggest difficulties, and additional feedback/requests - were all free text.
+
+To get a rough overview of the types of responses - i.e., which topics were responders had the biggest issues with - we read through each response and for each of the three questions we assigned one or more tags corresponding to different 'topics' the response fell under.
+
+### Data preparation
+
+First we need to load the tags for each response column, split the column tag column per tag, then count the number of times occurs.
+We do a simple count as a responder may have given multiple bits of feedback.
+
+```{r}
+data_responses_tagged_positive <- data_responses_tagged |> select(positive_tags)
+data_responses_tagged_improve <- data_responses_tagged |> select(improvement_tags)
+data_responses_tagged_request <- data_responses_tagged |> select(request_tags)
+
+summarise_tag_results <- function(in_list) {
+  in_list  |> 
+    str_split(',') |> 
+    unlist() |> 
+    str_trim(side = 'both') |> 
+    as_tibble_col(column_name = 'topic') |> 
+    group_by(topic) |> 
+    summarise(count = n()) |> 
+    arrange(desc(count)) |> 
+    mutate(
+      topic = fct_reorder(topic, count)
+    ) |> 
+    filter(topic != 'No feedback')
+    
+}
+
+data_tags_positive <- summarise_tag_results(data_responses_tagged_positive$positive_tags)
+
+data_tags_improve <- summarise_tag_results(data_responses_tagged_improve$improvement_tags)
+
+data_tags_request <- summarise_tag_results(data_responses_tagged_request$request_tags)
+
+```
+
+We can then plot bar charts with the number of responses hitting a particular topic.
+Note that remove responses that had no feedback.
+
+```{r}
+plot_topics_summary <- function(in_data, title) {
+  ggplot(in_data, aes(y = topic, x = count)) +
+    geom_col(fill = "#24b064") +
+    theme_minimal() +
+    labs(title = title, 
+         x = "Count", 
+         y = "Topic", 
+         caption = paste("Based on", nr_responses, "responses to the spring 2025 nf-core community survey")
+    )
+}
+
+plot_topics_summary(data_tags_positive, "Topics the respondees are happy about")
+plot_topics_summary(data_tags_improve, "Topics the respondees think should be improved upon")
+plot_topics_summary(data_tags_request, "Topics of specific requests from respondees")
+```
+
