@@ -61,7 +61,7 @@ nr_responses <- data_responses_raw |> count()
 
 We had `r nr_responses`, which we assume roughly equates to the number of people who responded (but as it is anonymous, we cannot guarantee so some people responded twice - however our survey software does try to re-use previous responses if made via the same browser).
 
-As of March 18th 2025, we had `nr_slack_members` people on slack. This means we have an approximate response rate of `r round((nr_responses / nr_slack_members) * 100, 1)`%.
+As of March 18th 2025, we had `r format(nr_slack_members, scientific = F)` people on slack. This means we have an approximate response rate of `r round((nr_responses / nr_slack_members) * 100, 1)`%.
 
 
 ### Geographic Location Analysis
