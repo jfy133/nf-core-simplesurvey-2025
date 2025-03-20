@@ -20,7 +20,7 @@ format:
 
 ## Introduction
 
-This notebook processes the results of the nf-core community general survey from February/March 2025.
+This notebook processes the results of the nf-core community general survey from February/March 2025 (date freeze: 2025-03-20).
 
 ## Preparation
 
@@ -282,7 +282,7 @@ ggplot(
 )
 ```
 
-## Feedback - positive and to improve upon
+## Feedback - positive and to improve upon (global)
 
 The main questions of the survey - what are you most happy with, what have been your biggest difficulties, and additional feedback/requests - were all free text.
 
@@ -354,42 +354,96 @@ plot_topics_summary <- function(in_data, title, subtitle) {
 (plot_topics_summary(data_tags_request, "Topics of specific requests from respondees", "Reviewer 1 interpretation") + plot_topics_summary(data_tags2_request, "Topics of specific requests from respondees", "Reviewer 2 interpretation"))
 ```
 
-## Concordence between two manual reviewers
 
-To roughly compare how the two reviewers tagged each response, we can do cross-line bars of the rank ordering of the most to least commonly found tags across all responses.
+## Feedback - positive and to improve upon (per responder type)
+
+We can also refine the above information by splitting the feedback for both User-only and Developer-only responders (we exclude people who consider themselves both for simplicity)
+
+### Data preparation
+
+First we need to load the tags for each response column, split the column tag column per tag, then count the number of times occurs.
+We do a simple count as a responder may have given multiple bits of feedback.
+
+```{r}
+#| warning: false
+#| message: false
+data_responses_tagged_positive <- data_responses_tagged |> select(do_you_consider_yourself_to_be_an_nf_core, positive_tags) |> rename(tags = positive_tags)
+data_responses_tagged_improve <- data_responses_tagged |> select(do_you_consider_yourself_to_be_an_nf_core, improvement_tags) |> rename(tags = improvement_tags)
+data_responses_tagged_request <- data_responses_tagged |> select(do_you_consider_yourself_to_be_an_nf_core, request_tags) |> rename(tags = request_tags)
+data_responses_tagged_2_positive <- data_responses_tagged_2 |> select(do_you_consider_yourself_to_be_an_nf_core, positive_tags) |> rename(tags = positive_tags)
+data_responses_tagged_2_improve <- data_responses_tagged_2 |> select(do_you_consider_yourself_to_be_an_nf_core, improvement_tags) |> rename(tags = improvement_tags)
+data_responses_tagged_2_request <- data_responses_tagged_2 |> select(do_you_consider_yourself_to_be_an_nf_core, request_tags) |> rename(tags = request_tags)
+
+summarise_tag_results_bytype <- function(in_list, tag_type) {
+  in_list  |> 
+    filter(do_you_consider_yourself_to_be_an_nf_core %in% c('User', 'Developer')) |> 
+    mutate(tag_type = tag_type, tags = str_split(tags, ',')) |> 
+    unnest() |> 
+    mutate(tags = str_trim(tags, side = 'both')) |> 
+    rename(responder_type = do_you_consider_yourself_to_be_an_nf_core, topic = tags) |> 
+    group_by(responder_type, topic) |> 
+    summarise(count = n()) |> 
+    arrange(desc(count)) |> 
+    mutate(
+      topic = fct_reorder(topic, count)
+    ) |> 
+    filter(topic != 'No feedback')
+    
+}
+
+data_tags_positive <- summarise_tag_results_bytype(data_responses_tagged_positive, 'positive_tags')
+data_tags_improve <- summarise_tag_results_bytype(data_responses_tagged_improve, 'improvement_tags')
+data_tags_request <- summarise_tag_results_bytype(data_responses_tagged_request, 'request_tags')
+
+data_tags2_positive <- summarise_tag_results_bytype(data_responses_tagged_2_positive, 'positive_tags')
+data_tags2_improve <- summarise_tag_results_bytype(data_responses_tagged_2_improve, 'improvement_tags')
+data_tags2_request <- summarise_tag_results_bytype(data_responses_tagged_2_request, 'request_tags')
+
+```
+
+### Distribution of feedback topics
+
+We can then plot bar charts with the number of responses hitting a particular topic.
+Note that remove responses that had no feedback.
 
 ```{r}
 #| fig-width: 12
-#| fig-height: 8
+plot_topics_summary <- function(in_data, title, subtitle, responder) {
+  data_for_plot <- in_data |> 
+    filter(responder_type == responder) |>
+    arrange(desc(count)) |> 
+    mutate(
+      topic = fct_reorder(topic, count)
+    )
 
-plot_tags_comparison <- function(r1, r2, question_type) {
-
-  data_comparison_positive <- full_join(
-      r1 |> rowid_to_column() |> select(-count),
-      r2 |> rowid_to_column() |> select(-count),
-      by = 'topic'
-    ) |>
-    rename(r1_rank = rowid.x, r2_rank = rowid.y) |>
-    select(topic, r1_rank, r2_rank) |>
-    pivot_longer(cols = !topic,
-                 names_to = 'reviewer',
-                 values_to = 'rank')
-
-  ggplot(data_comparison_positive,
-         aes(x = reviewer, y = rank, group = topic)) +
-    scale_y_reverse() +
-    geom_point() +
-    geom_line(colour = "#24b064") +
+  ggplot(data_for_plot, aes(y = topic, x = count)) +
+    geom_col(fill = "#24b064") +
     theme_minimal() +
-    geom_label(aes(label = topic)) +
-    labs(title = paste("Comparison of tags for question type:", question_type))
+    labs(title = title, 
+         subtitle = subtitle,
+         x = "Count", 
+         y = "Topic", 
+         caption = paste("Based on", nr_responses, "responses to the spring 2025 nf-core community survey")
+    ) +
+    scale_x_continuous(breaks = seq(0, 70, by = 10), limits = c(0,80))
 }
 
-plot_tags_comparison(data_tags_positive, data_tags2_positive, "positive")
-plot_tags_comparison(data_tags_improve, data_tags2_improve, "improvement")
-plot_tags_comparison(data_tags_request, data_tags2_request, "requests")
-  
+plot_topics_summary(data_tags_positive, "Topics the developer-only  respondees are happy about", "Reviewer 1 interpretation", 'Developer') + plot_topics_summary(data_tags2_positive, "Topics the developer-only  respondees are happy about", "Reviewer 2 interpretation", 'Developer')
+
+plot_topics_summary(data_tags_positive, "Topics the user-only respondees are happy about", "Reviewer 1 interpretation", 'User') + plot_topics_summary(data_tags2_positive, "Topics the user-only respondees are happy about", "Reviewer 2 interpretation", 'User')
+
+
+plot_topics_summary(data_tags_improve, "Topics the developer-only  respondees think should be improved upon", "Reviewer 1 interpretation", 'Developer') + plot_topics_summary(data_tags2_improve, "Topics the developer-only  respondees think should be improved upon", "Reviewer 2 interpretation", 'Developer')
+
+plot_topics_summary(data_tags_improve, "Topics the user-only  respondees think should be improved upon", "Reviewer 1 interpretation", 'User') + plot_topics_summary(data_tags2_improve, "Topics the user-only  respondees think should be improved upon", "Reviewer 2 interpretation", 'User')
+
+
+plot_topics_summary(data_tags_request, "Topics of specific requests from developer-only  respondees", "Reviewer 1 interpretation", 'Developer') + plot_topics_summary(data_tags2_request, "Topics of specific requests from developer-only  respondees", "Reviewer 2 interpretation", 'Developer')
+
+plot_topics_summary(data_tags_request, "Topics of specific requests from user-only respondees", "Reviewer 1 interpretation", 'User') + plot_topics_summary(data_tags2_request, "Topics of specific requests from user-only respondees", "Reviewer 2 interpretation", 'User')
+
+
+
+
+
 ```
-
-This image is not so useful (I tried to do a alluvium plot with `ggaluvium` but could not work out to get it to work sadly).
-
