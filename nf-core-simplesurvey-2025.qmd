@@ -33,6 +33,7 @@ library(tidyverse)
 library(janitor)
 library(patchwork)
 library(ggalluvial)
+## Try word clouds? https://cran.r-project.org/web/packages/ggwordcloud/vignettes/ggwordcloud.html
 ```
 
 Load relevant data files, and make the column names easier to parse grammatically.
@@ -209,8 +210,24 @@ We can select the column.
 
 ```{r}
 data_recommend_score <- data_responses_raw |>
-  select(how_likely_are_you_to_recommend_nf_core_to_others) |> 
-  filter(!is.na(how_likely_are_you_to_recommend_nf_core_to_others))
+  select(do_you_consider_yourself_to_be_an_nf_core, how_likely_are_you_to_recommend_nf_core_to_others) |> 
+   mutate(
+      do_you_consider_yourself_to_be_an_nf_core = case_match(
+        do_you_consider_yourself_to_be_an_nf_core,
+        "Developer, User" ~ "User, Developer",
+        "User, Exploring" ~ "User",
+        "non nf-core nf dev" ~ "Developer",
+        "Newcomer" ~ "User",
+        "Newbie" ~ "User",
+        "Developer, User, Manager" ~ "User, Developer",
+        "Developer, Maintainer" ~ "Developer",
+        "develop in nextflow" ~ "Developer",
+        "both" ~ "User, Developer",
+        NA ~ 'No response',
+        .default = do_you_consider_yourself_to_be_an_nf_core
+      )
+    ) |>
+  filter(!is.na(how_likely_are_you_to_recommend_nf_core_to_others), do_you_consider_yourself_to_be_an_nf_core %in% c("User", "Developer", "User, Developer")) 
 ```
 
 And then use the inbuilt group and counting functionality to plot a histogram with the a count of responses per score level.
@@ -226,7 +243,8 @@ ggplot(data_recommend_score,
      x = "Score",
      y = "Count", 
      caption = paste("Based on", nr_responses, "responses to the spring 2025 nf-core community survey")
-  )
+  ) +
+  facet_wrap(vars(do_you_consider_yourself_to_be_an_nf_core),, ncol = 1)
 ```
 
 We can also calculate the 'net promoter score' score, which subtracts the percentage  'detractor' responders from 'promoter' responses.
@@ -260,8 +278,24 @@ Finally to understand if responders were newcomers versus long time members, we 
 
 ```{r}
 data_confidence_score <- data_responses_raw |>
-  select(how_confident_are_you_working_with_nf_core_pipelines) |> 
-  filter(!is.na(how_confident_are_you_working_with_nf_core_pipelines))
+  select(do_you_consider_yourself_to_be_an_nf_core, how_confident_are_you_working_with_nf_core_pipelines) |> 
+   mutate(
+      do_you_consider_yourself_to_be_an_nf_core = case_match(
+        do_you_consider_yourself_to_be_an_nf_core,
+        "Developer, User" ~ "User, Developer",
+        "User, Exploring" ~ "User",
+        "non nf-core nf dev" ~ "Developer",
+        "Newcomer" ~ "User",
+        "Newbie" ~ "User",
+        "Developer, User, Manager" ~ "User, Developer",
+        "Developer, Maintainer" ~ "Developer",
+        "develop in nextflow" ~ "Developer",
+        "both" ~ "User, Developer",
+        NA ~ 'No response',
+        .default = do_you_consider_yourself_to_be_an_nf_core
+      )
+    ) |>
+  filter(!is.na(how_confident_are_you_working_with_nf_core_pipelines), do_you_consider_yourself_to_be_an_nf_core %in% c("User", "Developer", "User, Developer"))
 
 ```
 
@@ -279,7 +313,8 @@ ggplot(
      x = "Confidence score",
      y = "Count", 
      caption = paste("Based on", nr_responses, "responses to the spring 2025 nf-core community survey")
-)
+) +
+  facet_wrap(vars(do_you_consider_yourself_to_be_an_nf_core), ncol = 1)
 ```
 
 ## Feedback - positive and to improve upon (global)
