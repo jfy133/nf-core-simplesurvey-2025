@@ -33,6 +33,7 @@ library(tidyverse)
 library(janitor)
 library(patchwork)
 library(ggalluvial)
+library(ggwordcloud)
 ## Try word clouds? https://cran.r-project.org/web/packages/ggwordcloud/vignettes/ggwordcloud.html
 ```
 
@@ -365,6 +366,8 @@ data_tags2_request <- summarise_tag_results(data_responses_tagged_2_request$requ
 
 ### Distribution of feedback topics
 
+#### Barcharts
+
 We can then plot bar charts with the number of responses hitting a particular topic.
 Note that remove responses that had no feedback.
 
@@ -372,7 +375,17 @@ Note that remove responses that had no feedback.
 #| fig-height: 18
 #| fig-width: 12
 plot_topics_summary <- function(in_data, title, subtitle) {
-  ggplot(in_data, aes(y = topic, x = count)) +
+  data_plot <- in_data |> 
+    ungroup() |> 
+    select(topic, count) |> 
+    group_by(topic) |> 
+    summarise(count = sum(count)) |> 
+    arrange(desc(count)) |> 
+    mutate(
+      topic = fct_reorder(topic, count)
+    )
+  
+  ggplot(data_plot, aes(y = topic, x = count)) +
     geom_col(fill = "#24b064") +
     theme_minimal() +
     labs(title = title, 
@@ -389,6 +402,66 @@ plot_topics_summary <- function(in_data, title, subtitle) {
 (plot_topics_summary(data_tags_request, "Topics of specific requests from respondees", "Reviewer 1 interpretation") + plot_topics_summary(data_tags2_request, "Topics of specific requests from respondees", "Reviewer 2 interpretation"))
 ```
 
+#### Wordclouds
+
+We can also render this as a wordcloud
+
+```{r}
+plot_topics_wordcloud <- function(in_data, title, subtitle) {
+  data_plot <- in_data |> 
+    ungroup() |> 
+    select(topic, count) |> 
+    group_by(topic) |> 
+    summarise(count = sum(count)) |> 
+    arrange(desc(count)) |> 
+    mutate(
+      topic = fct_reorder(topic, count)
+    )
+  
+  ggplot(data_plot, aes(label = topic, size = count)) +
+    geom_text_wordcloud(colour = "#24b064", family = "Maven Pro") +
+    scale_size_area(max_size = 8) +
+    theme_minimal() +
+    labs(title = title, 
+         subtitle = subtitle,
+         caption = paste("Based on", nr_responses, "responses to the spring 2025 nf-core community survey")
+    )
+}
+
+plot_topics_wordcloud(data_tags_positive, "Topics the respondees are happy about", "Reviewer 1 interpretation")
+plot_topics_wordcloud(data_tags2_positive, "Topics the respondees are happy about", "Reviewer 2 interpretation")
+
+plot_topics_wordcloud(data_tags_improve, "Topics the respondees think should be improved upon", "Reviewer 1 interpretation") 
+plot_topics_wordcloud(data_tags2_improve, "Topics the respondees think should be improved upon", "Reviewer 2 interpretation") 
+
+plot_topics_wordcloud(data_tags_request, "Requests the respondees made", "Reviewer 1 interpretation") 
+plot_topics_wordcloud(data_tags2_request, "Requests the respondees made", "Reviewer 2 interpretation")
+```
+For no title versions
+
+```{r}
+plot_topics_wordcloud_clean <- function(in_data, r_type) {
+  data_plot <- in_data |> 
+    select(topic, count) |> 
+    group_by(topic) |> 
+    summarise(count = sum(count)) |> 
+    arrange(desc(count)) |> 
+    mutate(
+      topic = fct_reorder(topic, count)
+    )
+  
+  ggplot(data_plot, aes(label = topic, size = count)) +
+    geom_text_wordcloud(colour = "#24b064", family = "Maven Pro") +
+    scale_size_area(max_size = 10) +
+    theme_minimal()
+}
+
+plot_topics_wordcloud_clean(data_tags_positive, r_type = 'User')
+
+plot_topics_wordcloud_clean(data_tags_improve,  r_type = 'Developer') 
+
+plot_topics_wordcloud_clean(data_tags_request,  r_type = 'User, Developer') 
+```
 
 ## Feedback - positive and to improve upon (per responder type)
 
@@ -426,17 +499,19 @@ summarise_tag_results_bytype <- function(in_list, tag_type) {
     
 }
 
-data_tags_positive <- summarise_tag_results_bytype(data_responses_tagged_positive, 'positive_tags')
-data_tags_improve <- summarise_tag_results_bytype(data_responses_tagged_improve, 'improvement_tags')
-data_tags_request <- summarise_tag_results_bytype(data_responses_tagged_request, 'request_tags')
+data_tags_positive_bytype <- summarise_tag_results_bytype(data_responses_tagged_positive, 'positive_tags')
+data_tags_improve_bytype <- summarise_tag_results_bytype(data_responses_tagged_improve, 'improvement_tags')
+data_tags_request_bytype <- summarise_tag_results_bytype(data_responses_tagged_request, 'request_tags')
 
-data_tags2_positive <- summarise_tag_results_bytype(data_responses_tagged_2_positive, 'positive_tags')
-data_tags2_improve <- summarise_tag_results_bytype(data_responses_tagged_2_improve, 'improvement_tags')
-data_tags2_request <- summarise_tag_results_bytype(data_responses_tagged_2_request, 'request_tags')
+data_tags2_positive_bytype <- summarise_tag_results_bytype(data_responses_tagged_2_positive, 'positive_tags')
+data_tags2_improve_bytype <- summarise_tag_results_bytype(data_responses_tagged_2_improve, 'improvement_tags')
+data_tags2_request_bytype <- summarise_tag_results_bytype(data_responses_tagged_2_request, 'request_tags')
 
 ```
 
 ### Distribution of feedback topics
+
+#### Barcharts
 
 We can then plot bar charts with the number of responses hitting a particular topic.
 Note that remove responses that had no feedback.
@@ -463,22 +538,73 @@ plot_topics_summary <- function(in_data, title, subtitle, responder) {
     scale_x_continuous(breaks = seq(0, 70, by = 10), limits = c(0,80))
 }
 
-plot_topics_summary(data_tags_positive, "Topics the developer-only  respondees are happy about", "Reviewer 1 interpretation", 'Developer') + plot_topics_summary(data_tags2_positive, "Topics the developer-only  respondees are happy about", "Reviewer 2 interpretation", 'Developer')
+plot_topics_summary(data_tags_positive_bytype, "Topics the developer-only  respondees are happy about", "Reviewer 1 interpretation", 'Developer') + plot_topics_summary(data_tags2_positive_bytype, "Topics the developer-only  respondees are happy about", "Reviewer 2 interpretation", 'Developer')
 
-plot_topics_summary(data_tags_positive, "Topics the user-only respondees are happy about", "Reviewer 1 interpretation", 'User') + plot_topics_summary(data_tags2_positive, "Topics the user-only respondees are happy about", "Reviewer 2 interpretation", 'User')
-
-
-plot_topics_summary(data_tags_improve, "Topics the developer-only  respondees think should be improved upon", "Reviewer 1 interpretation", 'Developer') + plot_topics_summary(data_tags2_improve, "Topics the developer-only  respondees think should be improved upon", "Reviewer 2 interpretation", 'Developer')
-
-plot_topics_summary(data_tags_improve, "Topics the user-only  respondees think should be improved upon", "Reviewer 1 interpretation", 'User') + plot_topics_summary(data_tags2_improve, "Topics the user-only  respondees think should be improved upon", "Reviewer 2 interpretation", 'User')
+plot_topics_summary(data_tags_positive_bytype, "Topics the user-only respondees are happy about", "Reviewer 1 interpretation", 'User') + plot_topics_summary(data_tags2_positive_bytype, "Topics the user-only respondees are happy about", "Reviewer 2 interpretation", 'User')
 
 
-plot_topics_summary(data_tags_request, "Topics of specific requests from developer-only  respondees", "Reviewer 1 interpretation", 'Developer') + plot_topics_summary(data_tags2_request, "Topics of specific requests from developer-only  respondees", "Reviewer 2 interpretation", 'Developer')
+plot_topics_summary(data_tags_improve_bytype, "Topics the developer-only  respondees think should be improved upon", "Reviewer 1 interpretation", 'Developer') + plot_topics_summary(data_tags2_improve_bytype, "Topics the developer-only  respondees think should be improved upon", "Reviewer 2 interpretation", 'Developer')
 
-plot_topics_summary(data_tags_request, "Topics of specific requests from user-only respondees", "Reviewer 1 interpretation", 'User') + plot_topics_summary(data_tags2_request, "Topics of specific requests from user-only respondees", "Reviewer 2 interpretation", 'User')
-
-
+plot_topics_summary(data_tags_improve_bytype, "Topics the user-only  respondees think should be improved upon", "Reviewer 1 interpretation", 'User') + plot_topics_summary(data_tags2_improve_bytype, "Topics the user-only  respondees think should be improved upon", "Reviewer 2 interpretation", 'User')
 
 
+plot_topics_summary(data_tags_request_bytype, "Topics of specific requests from developer-only  respondees", "Reviewer 1 interpretation", 'Developer') + plot_topics_summary(data_tags2_request_bytype, "Topics of specific requests from developer-only  respondees", "Reviewer 2 interpretation", 'Developer')
 
+plot_topics_summary(data_tags_request_bytype, "Topics of specific requests from user-only respondees", "Reviewer 1 interpretation", 'User') + plot_topics_summary(data_tags2_request_bytype, "Topics of specific requests from user-only respondees", "Reviewer 2 interpretation", 'User')
+
+```
+
+#### Wordclouds
+
+And the world cloud method
+
+```{r}
+#| fig-width: 12
+plot_topics_wordcloud <- function(in_data, title, subtitle) {
+  ggplot(in_data, aes(label = topic, size = count)) +
+    facet_wrap(~responder_type, nrow = 1) +
+    geom_text_wordcloud(colour = "#24b064", family = "Maven Pro") +
+    scale_size_area(max_size = 8) +
+    theme_minimal() +
+    labs(title = title, 
+         subtitle = subtitle,
+         caption = paste("Based on", nr_responses, "responses to the spring 2025 nf-core community survey")
+    )
+
+}
+
+plot_topics_wordcloud(data_tags_positive_bytype, "Topics the respondees are happy about", "Reviewer 1 interpretation")
+plot_topics_wordcloud(data_tags2_positive_bytype, "Topics the respondees are happy about", "Reviewer 2 interpretation")
+
+plot_topics_wordcloud(data_tags_improve_bytype, "Topics the respondees think should be improved upon", "Reviewer 1 interpretation") 
+plot_topics_wordcloud(data_tags2_improve_bytype, "Topics the respondees think should be improved upon", "Reviewer 2 interpretation") 
+
+plot_topics_wordcloud(data_tags_request_bytype, "Requests the respondees made", "Reviewer 1 interpretation") 
+plot_topics_wordcloud(data_tags2_request_bytype, "Requests the respondees made", "Reviewer 2 interpretation") 
+```
+
+And no title versions
+
+```{r}
+plot_topics_wordcloud_clean <- function(in_data, r_type) {
+  data_plot <- in_data |> 
+    ungroup() |> 
+    filter(responder_type == r_type) |> 
+    select(topic, count) |> 
+    group_by(topic) |> 
+    summarise(count = sum(count)) |> 
+    arrange(desc(count)) |> 
+    mutate(
+      topic = fct_reorder(topic, count)
+    )
+  
+  ggplot(data_plot, aes(label = topic, size = count)) +
+    geom_text_wordcloud(colour = "#24b064", family = "Maven Pro") +
+    scale_size_area(max_size = 8) +
+    theme_minimal()
+}
+
+plot_topics_wordcloud_clean(data_tags_positive_bytype, r_type = 'User')
+plot_topics_wordcloud_clean(data_tags_improve_bytype,  r_type = 'Developer') 
+plot_topics_wordcloud_clean(data_tags_request_bytype,  r_type = 'User, Developer') 
 ```
