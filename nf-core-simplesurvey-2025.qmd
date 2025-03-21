@@ -440,6 +440,8 @@ plot_topics_wordcloud(data_tags2_request, "Requests the respondees made", "Revie
 For no title versions
 
 ```{r}
+#| fig-width: 7
+#| fig-height: 5
 plot_topics_wordcloud_clean <- function(in_data, r_type) {
   data_plot <- in_data |> 
     select(topic, count) |> 
@@ -517,7 +519,7 @@ We can then plot bar charts with the number of responses hitting a particular to
 Note that remove responses that had no feedback.
 
 ```{r}
-#| fig-width: 12
+#| fig-width: 16
 plot_topics_summary <- function(in_data, title, subtitle, responder) {
   data_for_plot <- in_data |> 
     filter(responder_type == responder) |>
@@ -559,7 +561,7 @@ plot_topics_summary(data_tags_request_bytype, "Topics of specific requests from 
 And the world cloud method
 
 ```{r}
-#| fig-width: 12
+#| fig-width: 8
 plot_topics_wordcloud <- function(in_data, title, subtitle) {
   ggplot(in_data, aes(label = topic, size = count)) +
     facet_wrap(~responder_type, nrow = 1) +
@@ -586,6 +588,8 @@ plot_topics_wordcloud(data_tags2_request_bytype, "Requests the respondees made",
 And no title versions
 
 ```{r}
+#| fig-width: 7
+#| fig-height: 5
 plot_topics_wordcloud_clean <- function(in_data, r_type) {
   data_plot <- in_data |> 
     ungroup() |> 
